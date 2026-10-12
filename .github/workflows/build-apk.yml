@@ -36,6 +36,6 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: LaserSkinLab-Gestionale-APK
+          name: LaserSkinLab-Gestionale-v1-1-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

@@ -12,13 +12,14 @@ import android.os.Environment;
 import android.webkit.*;
 import android.widget.*;
 import android.view.*;
-import java.util.Locale;
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 public final class MainActivity extends Activity {
  private static final String HOME="https://www.laserskinlab.it/gestionale/";
  private WebView web;
  private ValueCallback<Uri[]> chooser;
  private ProgressBar loading;
+ private SwipeRefreshLayout swipe;
  private static final int PICK=2341;
  private boolean trusted(Uri u) {
   if(u==null||!"https".equalsIgnoreCase(u.getScheme()))return false;
@@ -36,21 +37,39 @@ public final class MainActivity extends Activity {
  @Override public void onCreate(Bundle state){
   super.onCreate(state);
   getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-  LinearLayout layout=new LinearLayout(this);layout.setOrientation(1);layout.setBackgroundColor(Color.WHITE);
-  LinearLayout bar=new LinearLayout(this);bar.setBackgroundColor(Color.rgb(18,74,114));bar.setGravity(Gravity.CENTER_VERTICAL);
-  TextView title=new TextView(this);title.setText("Laser & Skin Lab");title.setTextColor(Color.WHITE);title.setTextSize(17);title.setPadding(18,0,0,0);bar.addView(title,new LinearLayout.LayoutParams(0,54,1));
-  Button reload=new Button(this);reload.setText("↻");reload.setOnClickListener(v->web.reload());bar.addView(reload);
-  Button browser=new Button(this);browser.setText("Browser");browser.setOnClickListener(v->external(Uri.parse(current())));bar.addView(browser);
-  layout.addView(bar);
-  FrameLayout frame=new FrameLayout(this);
-  web=new WebView(this);frame.addView(web,new FrameLayout.LayoutParams(-1,-1));
-  loading=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);frame.addView(loading,new FrameLayout.LayoutParams(-1,5,Gravity.TOP));
-  layout.addView(frame,new LinearLayout.LayoutParams(-1,0,1));setContentView(layout);
+  // La dashboard web contiene già la sua navigazione: nessuna barra duplicata.
+  getWindow().setStatusBarColor(Color.rgb(250,248,246));
+  getWindow().setNavigationBarColor(Color.rgb(250,248,246));
+  getWindow().getDecorView().setSystemUiVisibility(
+      View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+  FrameLayout root=new FrameLayout(this);
+  root.setBackgroundColor(Color.rgb(250,248,246));
+  if(android.os.Build.VERSION.SDK_INT>=30){
+    getWindow().setDecorFitsSystemWindows(false);
+    root.setOnApplyWindowInsetsListener((v,insets)->{
+      android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());
+      v.setPadding(0,bars.top,0,bars.bottom);
+      return insets;
+    });
+  } else {
+    root.setFitsSystemWindows(true);
+  }
+  swipe=new SwipeRefreshLayout(this);
+  swipe.setColorSchemeColors(Color.rgb(179,136,113));
+  web=new WebView(this);
+  swipe.addView(web,new android.view.ViewGroup.LayoutParams(-1,-1));
+  swipe.setOnChildScrollUpCallback((parent,child)->web.canScrollVertically(-1));
+  swipe.setOnRefreshListener(()->web.reload());
+  root.addView(swipe,new FrameLayout.LayoutParams(-1,-1));
+  loading=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
+  root.addView(loading,new FrameLayout.LayoutParams(-1,4,Gravity.TOP));
+  setContentView(root);
   WebSettings s=web.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setAllowFileAccess(false);s.setAllowContentAccess(true);s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);s.setSaveFormData(false);s.setSupportMultipleWindows(false);s.setSafeBrowsingEnabled(true);
   CookieManager.getInstance().setAcceptCookie(true);CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
   web.setWebViewClient(new WebViewClient(){
+   @Override public void onPageFinished(WebView view,String url){if(swipe!=null)swipe.setRefreshing(false);}
    @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest req){if(trusted(req.getUrl()))return false;external(req.getUrl());return true;}
-   @Override public void onReceivedError(WebView view,WebResourceRequest req,WebResourceError err){if(req.isForMainFrame())toast("Connessione non disponibile. Tocca ↻ per riprovare.");}
+   @Override public void onReceivedError(WebView view,WebResourceRequest req,WebResourceError err){if(req.isForMainFrame()){if(swipe!=null)swipe.setRefreshing(false);toast("Connessione non disponibile. Scorri verso il basso per riprovare.");}}
   });
   web.setWebChromeClient(new WebChromeClient(){
    @Override public void onProgressChanged(WebView w,int p){loading.setProgress(p);loading.setVisibility(p>=100?View.GONE:View.VISIBLE);}
